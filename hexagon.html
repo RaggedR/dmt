@@ -55,13 +55,12 @@ function hexVertices(cx, cy, r) {
 /**
  * Affine contraction spiral inside a hexagon.
  *
- * Same principle as the triangle Zentangle Paradox: each iteration
- * advances every vertex a fraction along its edge to the next vertex,
- * producing a smaller, rotated hexagon. The extra per-step rotation
- * `delta` (time-varying) makes the spiral wind and unwind.
- *
- * For reverse direction, vertices advance toward the previous vertex
- * instead of the next, mirroring the spiral.
+ * Each iteration advances every vertex a fraction along its edge,
+ * producing a smaller, rotated hexagon. An extra per-step rotation
+ * `delta` is applied after each contraction — this accumulates, so
+ * the n-th inner ring gets n*delta extra rotation. The outer hexagon
+ * stays fixed; the spiral winds forward ~30° at the center, then
+ * unwinds back.
  */
 function drawHexParadox(verts, steps, frac, reverse, delta) {
   let pts = verts.map(v => v.slice());
@@ -90,7 +89,7 @@ function drawHexParadox(verts, steps, frac, reverse, delta) {
       next.push(lerp(pts[j], target, frac));
     }
 
-    // Extra rotation around centroid
+    // Extra rotation around centroid (accumulates per step)
     let gcx = 0, gcy = 0;
     for (let j = 0; j < n; j++) { gcx += next[j][0]; gcy += next[j][1]; }
     gcx /= n; gcy /= n;
@@ -101,6 +100,14 @@ function drawHexParadox(verts, steps, frac, reverse, delta) {
 
     pts = next;
   }
+
+  // Fill the spiral center so no white gap remains
+  ctx.fillStyle = 'rgba(15,15,15,0.25)';
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let j = 1; j < n; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+  ctx.closePath();
+  ctx.fill();
 }
 
 /**
@@ -138,11 +145,12 @@ function animate(time) {
   if (size === 0) { requestAnimationFrame(animate); return; }
   if (hexes.length === 0) hexes = buildHexGrid(size);
 
-  // Smooth ping-pong oscillation
+  // Smooth ping-pong: wind forward ~30° at center, then unwind
+  // 30° total across 55 steps → ~0.545° per step max delta
   const t01 = (time / 1000 / CYCLE_SECONDS) % 1;
   const pingPong = t01 < 0.5 ? t01 * 2 : 2 - t01 * 2;
   const eased = 0.5 - 0.5 * Math.cos(pingPong * Math.PI);
-  const delta = (eased * 2 - 1) * (4 * Math.PI / 180);
+  const delta = eased * (60 / STEPS) * (Math.PI / 180);
 
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, size, size);
