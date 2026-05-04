@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zentangle Paradox — Straight Lines, Curved Illusions</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #f5f0e8; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const BG_COLOR = '#f5f0e8';
+const STEPS = 50;
+const ADVANCE = 0.075;
+
+function resize() {
+  const size = Math.min(innerWidth, innerHeight) * 0.92;
+  const dpr = devicePixelRatio;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw(size);
+}
+
+function lerp(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/**
+ * Zentangle Paradox: recursively rotated triangles.
+ *
+ * Start with triangle PQR. Each iteration advances every vertex
+ * a fraction `f` along its edge to produce a new, smaller, rotated
+ * triangle inside:
+ *
+ *   P' = P + f*(Q - P)
+ *   Q' = Q + f*(R - Q)
+ *   R' = R + f*(P - R)
+ *
+ * After n iterations, the cumulative rotation creates the illusion
+ * of a smooth logarithmic spiral, despite every single line being
+ * perfectly straight.
+ *
+ * Reversing the direction (advancing P→R instead of P→Q) mirrors
+ * the spiral. Adjacent up/down triangles get opposite spirals,
+ * which is what creates the characteristic meta-pattern.
+ */
+function drawParadox(A, B, C, steps, frac, reverse) {
+  let p = A, q = B, r = C;
+
+  for (let i = 0; i < steps; i++) {
+    const t = i / steps;
+    ctx.lineWidth = Math.max(0.15, 0.25 + 0.85 * (1 - t));
+    ctx.strokeStyle = `rgba(15,15,15,${0.3 + 0.6 * (1 - t * 0.4)})`;
+
+    ctx.beginPath();
+    ctx.moveTo(p[0], p[1]);
+    ctx.lineTo(q[0], q[1]);
+    ctx.lineTo(r[0], r[1]);
+    ctx.closePath();
+    ctx.stroke();
+
+    let np, nq, nr;
+    if (!reverse) {
+      np = lerp(p, q, frac);
+      nq = lerp(q, r, frac);
+      nr = lerp(r, p, frac);
+    } else {
+      np = lerp(p, r, frac);
+      nq = lerp(q, p, frac);
+      nr = lerp(r, q, frac);
+    }
+    p = np; q = nq; r = nr;
+  }
+}
+
+function draw(size) {
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, size, size);
+
+  // Equilateral triangle tessellation
+  // 5 up-triangles across → triWidth = size / 5
+  const numAcross = 5;
+  const triWidth = size / numAcross;
+  const triHeight = triWidth * Math.sqrt(3) / 2;
+  const rows = Math.ceil(size / triHeight) + 1;
+
+  // Center vertically
+  const totalHeight = rows * triHeight;
+  const offsetY = (size - totalHeight) / 2;
+  const offsetX = -triWidth / 2; // slight overflow for full coverage
+
+  const triangles = [];
+
+  for (let row = 0; row < rows; row++) {
+    const y = offsetY + row * triHeight;
+
+    // Up-pointing triangles
+    for (let k = -1; k <= numAcross + 1; k++) {
+      const x = offsetX + k * triWidth;
+      triangles.push({
+        A: [x, y + triHeight],
+        B: [x + triWidth, y + triHeight],
+        C: [x + triWidth / 2, y],
+        reverse: (row + k) % 2 === 0
+      });
+    }
+
+    // Down-pointing triangles (shifted by half a width)
+    for (let k = -1; k <= numAcross + 1; k++) {
+      const x = offsetX + k * triWidth + triWidth / 2;
+      triangles.push({
+        A: [x, y],
+        B: [x + triWidth, y],
+        C: [x + triWidth / 2, y + triHeight],
+        reverse: (row + k) % 2 !== 0
+      });
+    }
+  }
+
+  // Clip to circle
+  const cx = size / 2, cy = size / 2;
+  const radius = size * 0.46;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const tri of triangles) {
+    drawParadox(tri.A, tri.B, tri.C, STEPS, ADVANCE, tri.reverse);
+  }
+
+  ctx.restore();
+
+  // Circle border
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Soft outer shadow
+  const grad = ctx.createRadialGradient(cx, cy, radius - 2, cx, cy, radius + 12);
+  grad.addColorStop(0, 'rgba(0,0,0,0.1)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+}
+
+resize();
+addEventListener('resize', resize);
+</script>
+</body>
+</html>
