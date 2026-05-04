@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DMT Tunnel — Geometric Hallucination Patterns</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #000; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const STEPS = 80;
+const ROTATION_DEG = 3.5;
+const SHRINK = 0.95;
+const CYCLE_PERIOD = 20;
+
+function resize() {
+  canvas.width = innerWidth * devicePixelRatio;
+  canvas.height = innerHeight * devicePixelRatio;
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+}
+resize();
+addEventListener('resize', resize);
+
+function drawVortex(cx, cy, size, rotDir, timeAngle) {
+  for (let i = 0; i < STEPS; i++) {
+    const t = i / STEPS;
+    const s = size * Math.pow(SHRINK, i);
+    const angle = (i * ROTATION_DEG + timeAngle) * rotDir;
+    const gray = Math.round(245 - 220 * Math.pow(t, 1.2));
+
+    ctx.fillStyle = `rgb(${gray},${gray},${gray})`;
+    ctx.beginPath();
+    const rad = angle * Math.PI / 180;
+    const cos_a = Math.cos(rad);
+    const sin_a = Math.sin(rad);
+    const corners = [[ s, s], [-s, s], [-s, -s], [ s, -s]];
+    for (let k = 0; k < 4; k++) {
+      const rx = corners[k][0], ry = corners[k][1];
+      const x = cx + rx * cos_a - ry * sin_a;
+      const y = cy + rx * sin_a + ry * cos_a;
+      if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  for (let i = 0; i < STEPS; i++) {
+    const t = i / STEPS;
+    const s = size * Math.pow(SHRINK, i);
+    const angle = (i * ROTATION_DEG + timeAngle) * rotDir;
+    const lw = Math.max(1, 2.5 * (1 - t * 0.5));
+    const lineGray = Math.round(60 * (1 - t * 0.3));
+
+    ctx.strokeStyle = `rgb(${lineGray},${lineGray},${lineGray})`;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    const rad = angle * Math.PI / 180;
+    const cos_a = Math.cos(rad);
+    const sin_a = Math.sin(rad);
+    const corners = [[ s, s], [-s, s], [-s, -s], [ s, -s]];
+    for (let k = 0; k < 4; k++) {
+      const rx = corners[k][0], ry = corners[k][1];
+      const x = cx + rx * cos_a - ry * sin_a;
+      const y = cy + rx * sin_a + ry * cos_a;
+      if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  const r = Math.max(size * Math.pow(SHRINK, STEPS) * 1.2, 8);
+  ctx.fillStyle = '#080808';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  const grad = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.4, r * 0.1, cx, cy, r);
+  grad.addColorStop(0, 'rgba(180,180,180,0.8)');
+  grad.addColorStop(0.4, 'rgba(60,60,60,0.4)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function animate(time) {
+  const W = canvas.width;
+  const H = canvas.height;
+  const t01 = (time / 1000 / CYCLE_PERIOD) % 1;
+  const pingPong = t01 < 0.5 ? t01 * 2 : 2 - t01 * 2;
+  const eased = 0.5 - 0.5 * Math.cos(pingPong * Math.PI);
+  const timeAngle = eased * 93;
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  const qx = W / 4;
+  const qy = H / 4;
+  const vortexSize = Math.max(W, H) / 4;
+
+  const configs = [
+    [qx,     qy,      1,  0,     0,     W/2, H/2],
+    [qx * 3, qy,     -1,  W/2,   0,     W/2, H/2],
+    [qx,     qy * 3, -1,  0,     H/2,   W/2, H/2],
+    [qx * 3, qy * 3,  1,  W/2,   H/2,   W/2, H/2],
+  ];
+
+  for (const [cx, cy, rotDir, clipX, clipY, clipW, clipH] of configs) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(clipX, clipY, clipW, clipH);
+    ctx.clip();
+    drawVortex(cx, cy, vortexSize, rotDir, timeAngle);
+    ctx.restore();
+  }
+
+  ctx.strokeStyle = 'rgba(210,210,210,0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H);
+  ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2);
+  ctx.stroke();
+
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
