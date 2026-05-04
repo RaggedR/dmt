@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hexagonal Paradox — Animated Affine Contractions</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #f5f0e8; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const BG_COLOR = '#f5f0e8';
+const STEPS = 55;
+const ADVANCE = 0.065;
+const CYCLE_SECONDS = 12;
+
+let W = 0;
+
+function resize() {
+  W = Math.min(innerWidth, innerHeight) * 0.92;
+  const dpr = devicePixelRatio;
+  canvas.width = W * dpr;
+  canvas.height = W * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = W + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function lerp(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+function rotatePoint(p, cx, cy, cos, sin) {
+  const dx = p[0] - cx, dy = p[1] - cy;
+  return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
+}
+
+// Generate vertices of a regular hexagon (pointy-top)
+function hexVertices(cx, cy, r) {
+  const verts = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.PI / 6 + i * Math.PI / 3; // 30° offset for pointy-top
+    verts.push([cx + r * Math.cos(angle), cy + r * Math.sin(angle)]);
+  }
+  return verts;
+}
+
+/**
+ * Affine contraction spiral inside a hexagon.
+ *
+ * Same principle as the triangle Zentangle Paradox: each iteration
+ * advances every vertex a fraction along its edge to the next vertex,
+ * producing a smaller, rotated hexagon. The extra per-step rotation
+ * `delta` (time-varying) makes the spiral wind and unwind.
+ *
+ * For reverse direction, vertices advance toward the previous vertex
+ * instead of the next, mirroring the spiral.
+ */
+function drawHexParadox(verts, steps, frac, reverse, delta) {
+  let pts = verts.map(v => v.slice());
+  const cosDelta = Math.cos(delta);
+  const sinDelta = Math.sin(delta);
+  const n = pts.length; // 6
+
+  for (let i = 0; i < steps; i++) {
+    const t = i / steps;
+    ctx.lineWidth = Math.max(0.15, 0.2 + 0.8 * (1 - t));
+    ctx.strokeStyle = `rgba(15,15,15,${0.25 + 0.6 * (1 - t * 0.4)})`;
+
+    // Draw current hexagon
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let j = 1; j < n; j++) {
+      ctx.lineTo(pts[j][0], pts[j][1]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Affine contraction: advance each vertex along its edge
+    const next = [];
+    for (let j = 0; j < n; j++) {
+      const target = reverse ? pts[(j + n - 1) % n] : pts[(j + 1) % n];
+      next.push(lerp(pts[j], target, frac));
+    }
+
+    // Extra rotation around centroid
+    let gcx = 0, gcy = 0;
+    for (let j = 0; j < n; j++) { gcx += next[j][0]; gcy += next[j][1]; }
+    gcx /= n; gcy /= n;
+
+    for (let j = 0; j < n; j++) {
+      next[j] = rotatePoint(next[j], gcx, gcy, cosDelta, sinDelta);
+    }
+
+    pts = next;
+  }
+}
+
+/**
+ * Build honeycomb tessellation.
+ * Pointy-top hexagons with:
+ *   horiz spacing = sqrt(3) * R
+ *   vert spacing  = 1.5 * R
+ *   odd rows offset by sqrt(3)/2 * R
+ */
+function buildHexGrid(size) {
+  const R = size / 8; // radius — controls hex size
+  const hSpacing = Math.sqrt(3) * R;
+  const vSpacing = 1.5 * R;
+  const cols = Math.ceil(size / hSpacing) + 2;
+  const rows = Math.ceil(size / vSpacing) + 2;
+
+  const hexes = [];
+  for (let row = -1; row < rows; row++) {
+    for (let col = -1; col < cols; col++) {
+      const cx = col * hSpacing + (row % 2 === 0 ? 0 : hSpacing / 2);
+      const cy = row * vSpacing;
+      const verts = hexVertices(cx, cy, R);
+      // Alternate spiral direction in a honeycomb pattern
+      const reverse = (row + col) % 2 === 0;
+      hexes.push({ verts, reverse });
+    }
+  }
+  return hexes;
+}
+
+let hexes = [];
+
+function animate(time) {
+  const size = W;
+  if (size === 0) { requestAnimationFrame(animate); return; }
+  if (hexes.length === 0) hexes = buildHexGrid(size);
+
+  // Smooth ping-pong oscillation
+  const t01 = (time / 1000 / CYCLE_SECONDS) % 1;
+  const pingPong = t01 < 0.5 ? t01 * 2 : 2 - t01 * 2;
+  const eased = 0.5 - 0.5 * Math.cos(pingPong * Math.PI);
+  const delta = (eased * 2 - 1) * (4 * Math.PI / 180);
+
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, size, size);
+
+  const cx = size / 2, cy = size / 2;
+  const radius = size * 0.46;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const hex of hexes) {
+    drawHexParadox(hex.verts, STEPS, ADVANCE, hex.reverse, delta);
+  }
+
+  ctx.restore();
+
+  // Circle border
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  requestAnimationFrame(animate);
+}
+
+resize();
+addEventListener('resize', () => { resize(); hexes = buildHexGrid(W); });
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
